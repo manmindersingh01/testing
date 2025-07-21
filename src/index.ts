@@ -7,6 +7,7 @@ import {
   uploadToAzureBlob,
   triggerAzureContainerJob,
   deployToSWA,
+  runBuildAndDeploy
 } from "./services/azure-deploy";
 import {
   parseFrontendCode,
@@ -371,13 +372,22 @@ async function processPromptMessage(message: PromptMessage): Promise<void> {
         }`
       );
     }
+    const generateValidBuildId = (id: string): string => {
+  if (!id || id.trim() === '') {
+    return 'mango-shop-' + Date.now();
+  }
+  return id;
+};
+
+const validBuildId = generateValidBuildId(buildId);
+
 
     // Trigger Azure Container Job for build with timeout
     console.log(`[${buildId}] 🔧 Triggering Azure Container Job for build...`);
     let distUrl: string;
     try {
       distUrl = await Promise.race([
-        triggerAzureContainerJob(zipUrl, buildId, {
+        triggerAzureContainerJob(zipUrl, validBuildId, {
           resourceGroup: process.env.AZURE_RESOURCE_GROUP!,
           containerAppEnv: process.env.AZURE_CONTAINER_APP_ENV!,
           acrName: process.env.AZURE_ACR_NAME!,
@@ -431,27 +441,28 @@ async function processPromptMessage(message: PromptMessage): Promise<void> {
     const builtZipUrl = urls.downloadUrl;
 
     // Deploy to Azure Static Web Apps
-    console.log(`[${buildId}] 🚀 Deploying to Azure Static Web Apps...`);
-    let deployResult: { previewUrl: string; downloadUrl: string };
-    try {
-      deployResult = await deployToSWA(builtZipUrl, buildId);
-      logTimeSince("SWA deployment");
-    } catch (deployError) {
-      console.error(`[${buildId}] ❌ Deployment to SWA failed:`, deployError);
-      throw new Error(
-        `Failed to deploy to Static Web Apps: ${
-          deployError instanceof Error ? deployError.message : "Unknown error"
-        }`
-      );
-    }
+   // Deploy to Vercel
+console.log(`[${buildId}] 🚀 Deploying to Vercel...`);
+let deployResult: any;
+try {
+  deployResult = await runBuildAndDeploy(builtZipUrl, buildId);
+  logTimeSince("Vercel deployment");
+} catch (deployError) {
+  console.error(`[${buildId}] ❌ Deployment to Vercel failed:`, deployError);
+  throw new Error(
+    `Failed to deploy to Vercel: ${
+      deployError instanceof Error ? deployError.message : "Unknown error"
+    }`
+  );
+}
 
-    const { previewUrl, downloadUrl } = deployResult;
+   const previewUrl = deployResult;
+const downloadUrl = builtZipUrl; // Use the built zip URL as download URL
 
-    // Validate URLs
-    if (!previewUrl || !downloadUrl) {
-      console.warn(`[${buildId}] ⚠️ Missing URLs in deployment result`);
-    }
-
+// Validate URLs
+if (!previewUrl) {
+  console.warn(`[${buildId}] ⚠️ Missing preview URL in deployment result`);
+}
     // Log the results
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(
@@ -591,8 +602,8 @@ async function main() {
 // }
 
 processPromptMessage({
-  job_id: "",
-  prompt: "make me a webite for my mango selling shop",
+  job_id: "test-mango-shop-" + Date.now(),
+  prompt: "make me a website for my mango selling shop",
 });
 
 export { processPromptMessage };
