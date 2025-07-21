@@ -394,7 +394,7 @@ async function processPromptMessage(message: PromptMessage): Promise<void> {
 async function main() {
   console.log("🚀 Starting Azure Service Bus listener for code generation...");
 
-  const queueName = "html-generation-jobs";
+  const queueName = process.env.Bus;
 
   if (!serviceBusConnectionString) {
     console.error("❌ Azure Service Bus connection string not provided!");
